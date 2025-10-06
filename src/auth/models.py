@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field, Column
 import uuid
 import sqlalchemy.dialects.postgresql as pg
 from datetime import datetime
+from typing import Optional
 
 
 class User(SQLModel, table=True):
