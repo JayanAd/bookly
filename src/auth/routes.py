@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
-from .schemas import UserCreateModel, UserLoginModel
+from .schemas import UserCreateModel, UserLoginModel, UserModel, UserBooksModel
 from .service import UserService
 from .dependencies import AccessTokenBearer, RefreshTokenBearer, get_current_user, RoleChecker
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,7 +17,7 @@ role_checker = RoleChecker(allowed_roles=["admin","user"])
 REFRESH_TOKEN_EXPIRY_DAYS = 3
 
 
-@auth_router.post("/signup", status_code=status.HTTP_201_CREATED)
+@auth_router.post("/signup",response_model=UserModel ,status_code=status.HTTP_201_CREATED)
 async def create_user_account(
     user_data: UserCreateModel, session: AsyncSession = Depends(get_session)
 ):
@@ -92,7 +92,7 @@ async def get_new_access_token(
     )
 
 
-@auth_router.get("/me")
+@auth_router.get("/me", response_model=UserBooksModel, )
 async def get_current_user_details(
     current_user: dict = Depends(get_current_user),
     _:bool = Depends(role_checker)

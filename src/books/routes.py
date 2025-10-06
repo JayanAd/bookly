@@ -22,6 +22,15 @@ async def get_all_books(
     books = await book_service.get_all_books(session)
     return books
 
+@book_router.get("/user/{user_uid}", response_model=List[Book], dependencies=[role_checker])
+async def get_user_book_submission(
+    user_uid: str,
+    session: AsyncSession = Depends(get_session),
+    token_details: dict = Depends(access_token_bearer),
+):
+    books = await book_service.get_user_books(user_uid, session)
+    return books
+
 
 @book_router.post(
     "/",
