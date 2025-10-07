@@ -4,7 +4,7 @@ from typing import List
 from src.db.main import get_session
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.books.service import BookService
-from .schemas import Book, BookCreateModel, BookUpdateModel
+from .schemas import Book, BookCreateModel, BookUpdateModel, BookDetailModel
 from src.auth.dependencies import AccessTokenBearer, RoleChecker
 
 
@@ -22,7 +22,12 @@ async def get_all_books(
     books = await book_service.get_all_books(session)
     return books
 
-@book_router.get("/user/{user_uid}", response_model=List[Book], dependencies=[role_checker])
+
+@book_router.get(
+    "/user/{user_uid}",
+    response_model=List[Book],
+    dependencies=[role_checker],
+)
 async def get_user_book_submission(
     user_uid: str,
     session: AsyncSession = Depends(get_session),
@@ -48,7 +53,7 @@ async def create_a_book(
     return new_book
 
 
-@book_router.get("/{book_uid}", response_model=Book, dependencies=[role_checker])
+@book_router.get("/{book_uid}", response_model=BookDetailModel, dependencies=[role_checker])
 async def get_book(
     book_uid: str,
     session: AsyncSession = Depends(get_session),
