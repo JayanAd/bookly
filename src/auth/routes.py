@@ -9,6 +9,7 @@ from .utils import create_access_token, decode_token, verify_password
 from datetime import timedelta, datetime
 from fastapi.responses import JSONResponse
 from src.db.redis import add_jti_to_blocklist
+from src.errors import UserAlreadyExists, UserNotFound, InvalidCredentials, InvalidToken
 
 auth_router = APIRouter()
 user_service = UserService()
@@ -25,10 +26,11 @@ async def create_user_account(
 
     user_exists = await user_service.user_exists(email, session)
     if user_exists:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User with this email already exists",
-        )
+        # raise HTTPException(
+        #     status_code=status.HTTP_403_FORBIDDEN,
+        #     detail="User with this email already exists",
+        # )
+        raise UserAlreadyExists()
 
     new_user = await user_service.create_user(user_data, session)
     return new_user
@@ -70,10 +72,11 @@ async def login_user(
                     },
                 }
             )
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid email or password",
-    )
+    # raise HTTPException(
+    #     status_code=status.HTTP_401_UNAUTHORIZED,
+    #     detail="Invalid email or password",
+    # )
+    raise InvalidCredentials()
 
 
 @auth_router.get("/refresh_token")
@@ -86,10 +89,11 @@ async def get_new_access_token(
         new_access_token = create_access_token(user_data=token_details["user"])
 
         return JSONResponse(content={"access_token": new_access_token})
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Refresh token expired, please login again.",
-    )
+    # raise HTTPException(
+    #     status_code=status.HTTP_403_FORBIDDEN,
+    #     detail="Refresh token expired, please login again.",
+    # )
+    raise InvalidToken()
 
 
 @auth_router.get("/me", response_model=UserBooksModel, )
