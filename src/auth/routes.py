@@ -1,42 +1,58 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
-from .schemas import UserCreateModel, UserLoginModel, UserModel, UserBooksModel, EmailModel
+from .schemas import (
+    UserCreateModel,
+    UserLoginModel,
+    UserModel,
+    UserBooksModel,
+    EmailModel,
+)
 from .service import UserService
-from .dependencies import AccessTokenBearer, RefreshTokenBearer, get_current_user, RoleChecker
+from .dependencies import (
+    AccessTokenBearer,
+    RefreshTokenBearer,
+    get_current_user,
+    RoleChecker,
+)
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.main import get_session
-from .utils import create_access_token, decode_token, verify_password
+from .utils import (
+    create_access_token,
+    decode_token,
+    verify_password,
+    create_url_safe_token,
+    decode_url_safe_token,
+)
 from datetime import timedelta, datetime
 from fastapi.responses import JSONResponse
 from src.db.redis import add_jti_to_blocklist
 from src.errors import UserAlreadyExists, UserNotFound, InvalidCredentials, InvalidToken
-from src.mail import mail,create_message
+from src.mail import mail, create_message
+from src.config import Config
 
 auth_router = APIRouter()
 user_service = UserService()
-role_checker = RoleChecker(allowed_roles=["admin","user"])
+role_checker = RoleChecker(allowed_roles=["admin", "user"])
 
 REFRESH_TOKEN_EXPIRY_DAYS = 3
 
 
 @auth_router.post("/send_mail")
-async def send_mail(emails:EmailModel):
+async def send_mail(emails: EmailModel):
     emails = emails.addresses
     html = "<h1>Welcome to the app</h1>"
     subject = "Welcome to our app"
 
-    message = create_message(
-        recipients= emails,
-        subject=subject,
-        body=html
-    )
-    
+    message = create_message(recipients=emails, subject=subject, body=html)
+
     await mail.send_message(message)
 
     return {"message": "Email sent successfully"}
 
 
-@auth_router.post("/signup",response_model=UserModel ,status_code=status.HTTP_201_CREATED)
+@auth_router.post(
+    "/signup", status_code=status.HTTP_201_CREATED
+)
 async def create_user_account(
     user_data: UserCreateModel, session: AsyncSession = Depends(get_session)
 ):
@@ -51,7 +67,44 @@ async def create_user_account(
         raise UserAlreadyExists()
 
     new_user = await user_service.create_user(user_data, session)
-    return new_user
+    token = create_url_safe_token({"email": email})
+    link = f"http://{Config.DOMAIN}/api/v1/auth/verify/{token}"
+    html = f"""
+    <h1>Verify your Email</h1>
+    <p>Please click this <a href="{link}">link</a> to verify your email</p>
+    """
+
+    emails = [email]
+
+    subject = "Verify Your email"
+    message = create_message(recipients=emails, subject=subject, body=html)
+    await mail.send_message(message)
+
+    return {
+        "message": "Account Created! Check email to verify your account",
+        "user": new_user,
+    }
+
+
+@auth_router.get("/verify/{token}")
+async def verify_token(token: str, session: AsyncSession = Depends(get_session)):
+    token_data = decode_url_safe_token(token)
+    user_email = token_data.get("email")
+
+    if user_email:
+        user = await user_service.get_user_by_email(user_email, session)
+        if not user:
+            raise UserNotFound()
+
+        await user_service.update_user(user, {"is_verified": True}, session)
+        return JSONResponse(
+            content={"message": "Account verified successfully"},
+            status_code=status.HTTP_200_OK,
+        )
+    return JSONResponse(
+        content={"message": "Error occurred during verification"},
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
 
 
 @auth_router.post("/login")
@@ -69,7 +122,7 @@ async def login_user(
             user_data = {
                 "email": user.email,
                 "user_uid": str(user.uid),
-                "role": user.role
+                "role": user.role,
             }
             access_token = create_access_token(user_data)
 
@@ -114,12 +167,15 @@ async def get_new_access_token(
     raise InvalidToken()
 
 
-@auth_router.get("/me", response_model=UserBooksModel, )
+@auth_router.get(
+    "/me",
+    response_model=UserBooksModel,
+)
 async def get_current_user_details(
-    current_user: dict = Depends(get_current_user),
-    _:bool = Depends(role_checker)
+    current_user: dict = Depends(get_current_user), _: bool = Depends(role_checker)
 ):
     return current_user
+
 
 @auth_router.get("/logout")
 async def revoke_token(token_details: dict = Depends(AccessTokenBearer())):
